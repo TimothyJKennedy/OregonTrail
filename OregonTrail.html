@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Oregon Trail Remake</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 font-mono flex items-center justify-center min-h-screen">
+    <div id="game-container" class="bg-white p-6 rounded-lg shadow-lg w-full max-w-lg">
+        <!-- Status Display -->
+        <div id="status" class="mb-4 p-4 bg-gray-200 rounded">
+            <h2 class="text-lg font-bold">Journey Status</h2>
+            <p>Day: <span id="day">0</span></p>
+            <p>Distance Traveled: <span id="distance">0</span> miles</p>
+            <p>Food: <span id="food">100</span> lbs</p>
+            <p>Water: <span id="water">100</span> gallons</p>
+            <p>Money: $<span id="money">500</span></p>
+            <p>Oxen: <span id="oxen">2</span></p>
+            <p>Health: <span id="health">100</span>%</p>
+        </div>
+
+        <!-- Event Display -->
+        <div id="event" class="mb-4 p-4 bg-yellow-100 rounded hidden">
+            <p id="event-text"></p>
+            <div id="event-choices" class="mt-2 flex flex-col gap-2"></div>
+        </div>
+
+        <!-- Actions -->
+        <div id="actions" class="flex flex-col gap-2">
+            <button id="travel-btn" class="bg-blue-500 text-white p-2 rounded hover:bg-blue-600">Travel</button>
+            <button id="rest-btn" class="bg-green-500 text-white p-2 rounded hover:bg-green-600">Rest</button>
+            <button id="hunt-btn" class="bg-red-500 text-white p-2 rounded hover:bg-red-600">Hunt</button>
+            <button id="trade-btn" class="bg-purple-500 text-white p-2 rounded hover:bg-purple-600">Trade</button>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="game-over" class="hidden text-center">
+            <h2 class="text-2xl font-bold text-red-600">Game Over</h2>
+            <p id="game-over-message"></p>
+            <button id="restart-btn" class="mt-4 bg-blue-500 text-white p-2 rounded hover:bg-blue-600">Restart</button>
+        </div>
+    </div>
+
+    <script>
+        // Game State
+        const gameState = {
+            day: 0,
+            distance: 0,
+            food: 100,
+            water: 100,
+            money: 500,
+            oxen: 2,
+            health: 100,
+            totalDistance: 2000, // Missouri to Oregon
+            isGameOver: false
+        };
+
+        // DOM Elements
+        const statusElements = {
+            day: document.getElementById('day'),
+            distance: document.getElementById('distance'),
+            food: document.getElementById('food'),
+            water: document.getElementById('water'),
+            money: document.getElementById('money'),
+            oxen: document.getElementById('oxen'),
+            health: document.getElementById('health')
+        };
+        const eventDiv = document.getElementById('event');
+        const eventText = document.getElementById('event-text');
+        const eventChoices = document.getElementById('event-choices');
+        const actionsDiv = document.getElementById('actions');
+        const gameOverDiv = document.getElementById('game-over');
+        const gameOverMessage = document.getElementById('game-over-message');
+
+        // Random Events
+        const events = [
+            {
+                text: "A river blocks your path!",
+                choices: [
+                    { text: "Ford the river", action: () => fordRiver() },
+                    { text: "Wait for better conditions", action: () => wait() }
+                ]
+            },
+            {
+                text: "Someone in your party is sick!",
+                choices: [
+                    { text: "Rest and recover", action: () => rest() },
+                    { text: "Push forward", action: () => travel() }
+                ]
+            },
+            {
+                text: "Bad weather slows you down!",
+                choices: [
+                    { text: "Take shelter", action: () => rest() },
+                    { text: "Keep going", action: () => travel() }
+                ]
+            }
+        ];
+
+        // Update UI
+        function updateStatus() {
+            for (const [key, element] of Object.entries(statusElements)) {
+                element.textContent = gameState[key];
+            }
+        }
+
+        // Resource Consumption
+        function consumeResources() {
+            gameState.food -= 5;
+            gameState.water -= 5;
+            gameState.health -= gameState.oxen > 0 ? 1 : 5;
+            checkGameOver();
+        }
+
+        // Check Game Over Conditions
+        function checkGameOver() {
+            if (gameState.food <= 0 || gameState.water <= 0 || gameState.health <= 0 || gameState.oxen <= 0) {
+                gameState.isGameOver = true;
+                gameOver("You didn't make it to Oregon.");
+            } else if (gameState.distance >= gameState.totalDistance) {
+                gameState.isGameOver = true;
+                gameOver("Congratulations! You reached Oregon!");
+            }
+        }
+
+        // Game Over
+        function gameOver(message) {
+            actionsDiv.classList.add('hidden');
+            eventDiv.classList.add('hidden');
+            gameOverDiv.classList.remove('hidden');
+            gameOverMessage.textContent = message;
+        }
+
+        // Travel Logic
+        function travel() {
+            if (gameState.oxen <= 0) return alert("You need oxen to travel!");
+            gameState.day++;
+            gameState.distance += Math.floor(Math.random() * 20) + 10;
+            consumeResources();
+            updateStatus();
+            triggerRandomEvent();
+        }
+
+        // Rest Logic
+        function rest() {
+            gameState.day++;
+            gameState.health = Math.min(100, gameState.health + 10);
+            consumeResources();
+            updateStatus();
+            hideEvent();
+        }
+
+        // Hunt Logic
+        function hunt() {
+            gameState.day++;
+            const foodGained = Math.floor(Math.random() * 50) + 10;
+            gameState.food += foodGained;
+            consumeResources();
+            updateStatus();
+            triggerRandomEvent();
+        }
+
+        // Trade Logic (Simple Placeholder)
+        function trade() {
+            gameState.day++;
+            if (gameState.money >= 50) {
+                gameState.money -= 50;
+                gameState.food += 20;
+                gameState.water += 20;
+            }
+            consumeResources();
+            updateStatus();
+            hideEvent();
+        }
+
+        // River Crossing Logic
+        function fordRiver() {
+            const success = Math.random() > 0.3;
+            if (success) {
+                gameState.distance += 20;
+            } else {
+                gameState.oxen--;
+                gameState.health -= 20;
+            }
+            consumeResources();
+            updateStatus();
+            hideEvent();
+        }
+
+        // Wait Logic
+        function wait() {
+            gameState.day += 2;
+            consumeResources();
+            updateStatus();
+            hideEvent();
+        }
+
+        // Random Event Trigger
+        function triggerRandomEvent() {
+            if (Math.random() < 0.4) { // 40% chance of event
+                const event = events[Math.floor(Math.random() * events.length)];
+                eventText.textContent = event.text;
+                eventChoices.innerHTML = '';
+                event.choices.forEach(choice => {
+                    const btn = document.createElement('button');
+                    btn.textContent = choice.text;
+                    btn.className = 'bg-blue-500 text-white p-2 rounded hover:bg-blue-600';
+                    btn.onclick = choice.action;
+                    eventChoices.appendChild(btn);
+                });
+                eventDiv.classList.remove('hidden');
+            }
+        }
+
+        // Hide Event
+        function hideEvent() {
+            eventDiv.classList.add('hidden');
+        }
+
+        // Event Listeners
+        document.getElementById('travel-btn').addEventListener('click', travel);
+        document.getElementById('rest-btn').addEventListener('click', rest);
+        document.getElementById('hunt-btn').addEventListener('click', hunt);
+        document.getElementById('trade-btn').addEventListener('click', trade);
+        document.getElementById('restart-btn').addEventListener('click', () => {
+            Object.assign(gameState, {
+                day: 0, distance: 0, food: 100, water: 100, money: 500, oxen: 2, health: 100, isGameOver: false
+            });
+            updateStatus();
+            actionsDiv.classList.remove('hidden');
+            gameOverDiv.classList.add('hidden');
+            hideEvent();
+        });
+
+        // Initial Update
+        updateStatus();
+    </script>
+</body>
+</html>

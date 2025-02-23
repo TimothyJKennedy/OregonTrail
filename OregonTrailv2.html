@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Oregon Trail Remake</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .pixel-border { border: 2px solid black; border-style: outset; }
+        .event-visual { height: 50px; background: #e5e7eb; margin-bottom: 10px; }
+    </style>
+</head>
+<body class="bg-gray-100 font-mono flex items-center justify-center min-h-screen">
+    <div id="game-container" class="bg-white p-6 rounded-lg shadow-lg w-full max-w-lg">
+        <!-- Role Selection -->
+        <div id="role-selection" class="mb-4">
+            <h2 class="text-lg font-bold">Choose Your Role</h2>
+            <button id="banker-btn" class="bg-blue-500 text-white p-2 rounded hover:bg-blue-600">Banker ($1600)</button>
+            <button id="carpenter-btn" class="bg-blue-500 text-white p-2 rounded hover:bg-blue-600">Carpenter ($800)</button>
+            <button id="farmer-btn" class="bg-blue-500 text-white p-2 rounded hover:bg-blue-600">Farmer ($400)</button>
+        </div>
+
+        <!-- Party Setup -->
+        <div id="party-setup" class="mb-4 hidden">
+            <h2 class="text-lg font-bold">Name Your Party (4 Members)</h2>
+            <input id="member1" class="border p-2 mb-2 w-full" placeholder="Member 1" maxlength="20">
+            <input id="member2" class="border p-2 mb-2 w-full" placeholder="Member 2" maxlength="20">
+            <input id="member3" class="border p-2 mb-2 w-full" placeholder="Member 3" maxlength="20">
+            <input id="member4" class="border p-2 mb-2 w-full" placeholder="Member 4" maxlength="20">
+            <button id="start-journey-btn" class="bg-blue-500 text-white p-2 rounded hover:bg-blue-600">Start Journey</button>
+        </div>
+
+        <!-- Status Display -->
+        <div id="status" class="mb-4 p-4 bg-gray-200 rounded pixel-border hidden">
+            <h2 class="text-lg font-bold">Journey Status</h2>
+            <p>Day: <span id="day">0</span></p>
+            <p>Distance Traveled: <span id="distance">0</span> miles</p>
+            <p>Food: <span id="food">100</span> lbs</p>
+            <p>Water: <span id="water">100</span> gallons</p>
+            <p>Money: $<span id="money">500</span></p>
+            <p>Oxen: <span id="oxen">2</span></p>
+            <p>Axles: <span id="axles">2</span></p>
+            <p>Wheels: <span id="wheels">4</span></p>
+            <p>Party: <span id="party-health"></span></p>
+        </div>
+
+        <!-- Event Display -->
+        <div id="event" class="mb-4 p-4 bg-yellow-100 rounded pixel-border hidden">
+            <div id="event-visual" class="event-visual"></div>
+            <p id="event-text"></p>
+            <div id="event-choices" class="mt-2 flex flex-col gap-2"></div>
+        </div>
+
+        <!-- Actions -->
+        <div id="actions" class="flex flex-col gap-2 hidden">
+            <button id="travel-btn" class="bg-blue-500 text-white p-2 rounded hover:bg-blue-600">Travel</button>
+            <button id="rest-btn" class="bg-green-500 text-white p-2 rounded hover:bg-green-600">Rest</button>
+            <button id="hunt-btn" class="bg-red-500 text-white p-2 rounded hover:bg-red-600">Hunt</button>
+            <button id="trade-btn" class="bg-purple-500 text-white p-2 rounded hover:bg-purple-600">Trade</button>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="game-over" class="hidden text-center">
+            <h2 class="text-2xl font-bold text-red-600">Game Over</h2>
+            <p id="game-over-message"></p>
+            <button id="restart-btn" class="mt-4 bg-blue-500 text-white p-2 rounded hover:bg-blue-600">Restart</button>
+        </div>
+    </div>
+
+    <script>
+        // Game State
+        const gameState = {
+            day: 0,
+            distance: 0,
+            food: 100,
+            water: 100,
+            money: 500,
+            oxen: 2,
+            axles: 2,
+            wheels: 4,
+            totalDistance: 2000,
+            isGameOver: false,
+            role: null,
+            party: []
+        };
+
+        // DOM Elements
+        const roleSelection = document.getElementById('role-selection');
+        const partySetup = document.getElementById('party-setup');
+        const statusDiv = document.getElementById('status');
+        const statusElements = {
+            day: document.getElementById('day'),
+            distance: document.getElementById('distance'),
+            food: document.getElementById('food'),
+            water: document.getElementById('water'),
+            money: document.getElementById('money'),
+            oxen: document.getElementById('oxen'),
+            axles: document.getElementById('axles'),
+            wheels: document.getElementById('wheels'),
+            partyHealth: document.getElementById('party-health')
+        };
+        const eventDiv = document.getElementById('event');
+        const eventVisual = document.getElementById('event-visual');
+        const eventText = document.getElementById('event-text');
+        const eventChoices = document.getElementById('event-choices');
+        const actionsDiv = document.getElementById('actions');
+        const gameOverDiv = document.getElementById('game-over');
+        const gameOverMessage = document.getElementById('game-over-message');
+
+        // Roles
+        const roles = {
+            banker: { money: 1600, food: 100, water: 100, oxen: 2, axles: 2, wheels: 4 },
+            carpenter: { money: 800, food: 150, water: 150, oxen: 2, axles: 2, wheels: 4 },
+            farmer: { money: 400, food: 200, water: 200, oxen: 3, axles: 2, wheels: 4 }
+        };
+
+        // Random Events
+        const events = [
+            {
+                text: () => {
+                    const depth = Math.floor(Math.random() * 10) + 1;
+                    const width = Math.floor(Math.random() * 200) + 50;
+                    return `A river blocks your path! Depth: ${depth} ft, Width: ${width} ft`;
+                },
+                visual: 'bg-blue-300',
+                choices: (depth) => {
+                    const choices = [
+                        { text: "Ford the river", action: () => fordRiver(depth) },
+                        { text: "Wait for better conditions", action: () => wait() }
+                    ];
+                    if (depth > 3 && gameState.money >= 50) {
+                        choices.push({ text: "Pay ferryman ($50)", action: () => ferryRiver() });
+                    }
+                    return choices;
+                }
+            },
+            {
+                text: () => `${gameState.party[Math.floor(Math.random() * gameState.party.length)].name} is sick!`,
+                visual: 'bg-red-200',
+                choices: [
+                    { text: "Rest and recover", action: () => rest() },
+                    { text: "Push forward", action: () => travel() }
+                ]
+            },
+            {
+                text: "Bad weather slows you down!",
+                visual: 'bg-gray-400',
+                choices: [
+                    { text: "Take shelter", action: () => rest() },
+                    { text: "Keep going", action: () => travel() }
+                ]
+            },
+            {
+                text: "Bandits attack your wagon!",
+                visual: 'bg-orange-300',
+                choices: [
+                    { text: "Fight them off", action: () => fightBandits() },
+                    { text: "Give them supplies", action: () => surrenderSupplies() }
+                ]
+            },
+            {
+                text: "You find a trading post!",
+                visual: 'bg-green-200',
+                choices: () => tradeAtPost()
+            },
+            {
+                text: () => `${gameState.party[Math.floor(Math.random() * gameState.party.length)].name} broke their arm!`,
+                visual: 'bg-red-200',
+                choices: [
+                    { text: "Rest and heal", action: () => rest() },
+                    { text: "Keep moving", action: () => travel() }
+                ]
+            },
+            {
+                text: () => `${gameState.party[Math.floor(Math.random() * gameState.party.length)].name} was bitten by a snake!`,
+                visual: 'bg-red-200',
+                choices: [
+                    { text: "Rest and treat", action: () => rest() },
+                    { text: "Push forward", action: () => travel() }
+                ]
+            }
+        ];
+
+        // Update UI
+        function updateStatus() {
+            for (const [key, element] of Object.entries(statusElements)) {
+                if (key === 'partyHealth') {
+                    element.textContent = gameState.party.map(m => `${m.name}: ${m.health}%`).join(', ');
+                } else {
+                    element.textContent = gameState[key];
+                }
+            }
+        }
+
+        // Resource Consumption
+        function consumeResources() {
+            gameState.food -= 5;
+            gameState.water -= 5;
+            gameState.party.forEach(member => member.health -= gameState.oxen > 0 ? 1 : 5);
+            checkGameOver();
+        }
+
+        // Check Game Over Conditions
+        function checkGameOver() {
+            if (gameState.food <= 0 || gameState.water <= 0 || gameState.party.every(m => m.health <= 0) || (gameState.oxen <= 0 && (gameState.axles > 0 || gameState.wheels > 0))) {
+                gameState.isGameOver = true;
+                gameOver("You didn't make it to Oregon.");
+            } else if (gameState.distance >= gameState.totalDistance) {
+                gameState.isGameOver = true;
+                gameOver("Congratulations! You reached Oregon!");
+            }
+        }
+
+        // Game Over
+        function gameOver(message) {
+            actionsDiv.classList.add('hidden');
+            eventDiv.classList.add('hidden');
+            gameOverDiv.classList.remove('hidden');
+            gameOverMessage.textContent = message;
+        }
+
+        // Travel Logic
+        function travel() {
+            if (gameState.oxen <= 0 && (gameState.axles > 0 || gameState.wheels > 0)) return alert("You need oxen to move with a wagon!");
+            gameState.day++;
+            let speed = 10 + Math.floor(Math.random() * 10);
+            if (gameState.axles < 2 || gameState.wheels < 4) speed = Math.floor(speed / 2);
+            if (gameState.axles === 0 && gameState.wheels === 0 && gameState.oxen > 0) speed = Math.floor(speed / 4);
+            gameState.distance += speed;
+            if (Math.random() < 0.1 && gameState.axles > 0) gameState.axles--; // 10% chance to lose an axle
+            if (Math.random() < 0.1 && gameState.wheels > 0) gameState.wheels--; // 10% chance to lose a wheel
+            consumeResources();
+            updateStatus();
+            triggerRandomEvent();
+        }
+
+        // Rest Logic
+        function rest() {
+            gameState.day++;
+            gameState.party.forEach(member => member.health = Math.min(100, member.health + 10));
+            consumeResources();
+            updateStatus();
+            hideEvent();
+        }
+
+        // Hunt Logic
+        function hunt() {
+            gameState.day++;
+            const foodGained = Math.floor(Math.random() * 50) + 10;
+            gameState.food += foodGained;
+            consumeResources();
+            updateStatus();
+            triggerRandomEvent();
+        }
+
+        // Trade Logic (General)
+        function trade() {
+            gameState.day++;
+            consumeResources();
+            updateStatus();
+            triggerRandomEvent();
+        }
+
+        // Detailed Trading at Post
+        function tradeAtPost() {
+            const trades = [
+                { offer: "20 food", cost: 50, action: () => { gameState.food += 20; gameState.money -= 50; } },
+                { offer: "20 water", cost: 50, action: () => { gameState.water += 20; gameState.money -= 50; } },
+                { offer: "1 ox", cost: 100, action: () => { gameState.oxen += 1; gameState.money -= 100; } },
+                { offer: "1 axle", cost: 75, action: () => { gameState.axles += 1; gameState.money -= 75; } },
+                { offer: "1 wheel", cost: 25, action: () => { gameState.wheels += 1; gameState.money -= 25; } }
+            ];
+            eventText.textContent = "Trading Post Offers:";
+            eventChoices.innerHTML = '';
+            trades.forEach(trade => {
+                if (gameState.money >= trade.cost) {
+                    const btn = document.createElement('button');
+                    btn.textContent = `${trade.offer} for $${trade.cost}`;
+                    btn.className = 'bg-blue-500 text-white p-2 rounded hover:bg-blue-600 mb-1';
+                    btn.onclick = () => { trade.action(); updateStatus(); };
+                    eventChoices.appendChild(btn);
+                }
+            });
+            const continueBtn = document.createElement('button');
+            continueBtn.textContent = "Continue Journey";
+            continueBtn.className = 'bg-gray-500 text-white p-2 rounded hover:bg-gray-600';
+            continueBtn.onclick = () => { hideEvent(); travel(); };
+            eventChoices.appendChild(continueBtn);
+            return [];
+        }
+
+        // River Crossing Logic
+        function fordRiver(depth) {
+            const successChance = depth > 5 ? 0.5 : 0.8;
+            const success = Math.random() < successChance;
+            if (success) {
+                gameState.distance += 20;
+            } else {
+                gameState.oxen--;
+                gameState.wheels--;
+                const member = gameState.party[Math.floor(Math.random() * gameState.party.length)];
+                member.health -= 20;
+                if (member.health <= 0) eventText.textContent += ` ${member.name} drowned!`;
+            }
+            consumeResources();
+            updateStatus();
+            hideEvent();
+        }
+
+        // Ferry Logic
+        function ferryRiver() {
+            gameState.money -= 50;
+            gameState.distance += 20;
+            consumeResources();
+            updateStatus();
+            hideEvent();
+        }
+
+        // Wait Logic
+        function wait() {
+            gameState.day += 2;
+            consumeResources();
+            updateStatus();
+            hideEvent();
+        }
+
+        // Bandit Logic
+        function fightBandits() {
+            const success = Math.random() > 0.5;
+            if (success) {
+                gameState.money += 20;
+            } else {
+                gameState.health -= 20;
+                gameState.food -= 20;
+            }
+            consumeResources();
+            updateStatus();
+            hideEvent();
+        }
+
+        function surrenderSupplies() {
+            gameState.food -= 30;
+            gameState.water -= 30;
+            consumeResources();
+            updateStatus();
+            hideEvent();
+        }
+
+        // Random Event Trigger
+        function triggerRandomEvent() {
+            if (Math.random() < 0.5 && gameState.party.some(m => m.health > 0)) {
+                const event = events[Math.floor(Math.random() * events.length)];
+                const eventTextValue = typeof event.text === 'function' ? event.text() : event.text;
+                eventText.textContent = eventTextValue;
+                eventVisual.className = `event-visual ${event.visual}`;
+                eventChoices.innerHTML = '';
+                const choices = typeof event.choices === 'function' ? event.choices(parseInt(eventTextValue.match(/Depth: (\d+)/)?.[1] || 0)) : event.choices;
+                choices.forEach(choice => {
+                    const btn = document.createElement('button');
+                    btn.textContent = choice.text;
+                    btn.className = 'bg-blue-500 text-white p-2 rounded hover:bg-blue-600';
+                    btn.onclick = choice.action;
+                    eventChoices.appendChild(btn);
+                });
+                eventDiv.classList.remove('hidden');
+            }
+        }
+
+        // Hide Event
+        function hideEvent() {
+            eventDiv.classList.add('hidden');
+        }
+
+        // Start Game with Role and Party
+        function startGame(role) {
+            gameState.role = role;
+            roleSelection.classList.add('hidden');
+            partySetup.classList.remove('hidden');
+        }
+
+        function initializeParty() {
+            const names = [
+                document.getElementById('member1').value || "Member 1",
+                document.getElementById('member2').value || "Member 2",
+                document.getElementById('member3').value || "Member 3",
+                document.getElementById('member4').value || "Member 4"
+            ];
+            gameState.party = names.map(name => ({ name, health: 100 }));
+            Object.assign(gameState, roles[gameState.role]);
+            gameState.day = 0;
+            gameState.distance = 0;
+            gameState.isGameOver = false;
+            partySetup.classList.add('hidden');
+            statusDiv.classList.remove('hidden');
+            actionsDiv.classList.remove('hidden');
+            updateStatus();
+        }
+
+        // Event Listeners
+        document.getElementById('banker-btn').addEventListener('click', () => startGame('banker'));
+        document.getElementById('carpenter-btn').addEventListener('click', () => startGame('carpenter'));
+        document.getElementById('farmer-btn').addEventListener('click', () => startGame('farmer'));
+        document.getElementById('start-journey-btn').addEventListener('click', initializeParty);
+        document.getElementById('travel-btn').addEventListener('click', travel);
+        document.getElementById('rest-btn').addEventListener('click', rest);
+        document.getElementById('hunt-btn').addEventListener('click', hunt);
+        document.getElementById('trade-btn').addEventListener('click', trade);
+        document.getElementById('restart-btn').addEventListener('click', () => {
+            roleSelection.classList.remove('hidden');
+            partySetup.classList.add('hidden');
+            statusDiv.classList.add('hidden');
+            actionsDiv.classList.add('hidden');
+            gameOverDiv.classList.add('hidden');
+            hideEvent();
+        });
+    </script>
+</body>
+</html>
